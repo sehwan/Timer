@@ -1,0 +1,7 @@
+# MacOS
+.DS_Store
+
+# Executables
+Timer.app/Contents/MacOS/TimerApp
+test
+test.swift
