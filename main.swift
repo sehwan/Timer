@@ -97,39 +97,52 @@ class TimerAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(NSMenuItem(title: "어제 기록 수정", action: #selector(editYesterdayRecord), keyEquivalent: ""))
         
         menu.addItem(NSMenuItem.separator())
-        let historyItem = NSMenuItem(title: "📋 최근 7일 기록", action: nil, keyEquivalent: "")
-        historyItem.isEnabled = false
-        menu.addItem(historyItem)
         
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        let logicalNow = Date().addingTimeInterval(-Double(midnightOffset))
+        let calendar = Calendar.current
+        let now = Date()
+        let year = calendar.component(.year, from: now)
+        if let yearStart = calendar.date(from: DateComponents(year: year, month: 1, day: 1)),
+           let yearEnd = calendar.date(from: DateComponents(year: year, month: 12, day: 31)),
+           let daysPassed = calendar.dateComponents([.day], from: calendar.startOfDay(for: yearStart), to: calendar.startOfDay(for: now)).day,
+           let daysRemaining = calendar.dateComponents([.day], from: calendar.startOfDay(for: now), to: yearEnd).day {
+            let yearEndItem = NSMenuItem(title: "📅 \(daysPassed) / \(daysRemaining)", action: nil, keyEquivalent: "")
+            yearEndItem.isEnabled = false
+            menu.addItem(yearEndItem)
+        }
         
         var totalSeconds = 0
         let dailyRecords = UserDefaults.standard.dictionary(forKey: "dailyRecords") as? [String: Int] ?? [:]
+        let logicalNow = Date().addingTimeInterval(-Double(midnightOffset))
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        
+        for i in (1...7).reversed() {
+            if let pastDate = Calendar.current.date(byAdding: .day, value: -i, to: logicalNow) {
+                let dateString = formatter.string(from: pastDate)
+                totalSeconds += dailyRecords[dateString] ?? 0
+            }
+        }
+        
+        menu.addItem(NSMenuItem.separator())
+        let avgSeconds = totalSeconds / 7
+        let avgItem = NSMenuItem(title: "📊 \(formatTime(avgSeconds))", action: nil, keyEquivalent: "")
+        avgItem.isEnabled = false
+        menu.addItem(avgItem)
         
         for i in (1...7).reversed() {
             if let pastDate = Calendar.current.date(byAdding: .day, value: -i, to: logicalNow) {
                 let dateString = formatter.string(from: pastDate)
                 let secs = dailyRecords[dateString] ?? 0
-                
                 let timeStr = formatTime(secs)
-                let item = NSMenuItem(title: "\(i) days ago: \(timeStr)", action: nil, keyEquivalent: "")
+                let dayLabel = i == 1 ? "day" : "days"
+                let item = NSMenuItem(title: "\(i) \(dayLabel) ago: \(timeStr)", action: nil, keyEquivalent: "")
                 item.isEnabled = false
                 menu.addItem(item)
-                
-                totalSeconds += secs
             }
         }
         
-        let avgSeconds = totalSeconds / 7
         menu.addItem(NSMenuItem.separator())
-        let avgItem = NSMenuItem(title: "📊 7일 평균: \(formatTime(avgSeconds))", action: nil, keyEquivalent: "")
-        avgItem.isEnabled = false
-        menu.addItem(avgItem)
-        
-        menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "종료", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: "종료", action: #selector(NSApplication.terminate(_:)), keyEquivalent: ""))
     }
     
     @objc func editFinishTime() {
