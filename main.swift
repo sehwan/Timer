@@ -41,6 +41,26 @@ class TimerAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         
         startTimer()
         setupCarbonHotkey()
+        setupNotifications()
+    }
+    
+    func setupNotifications() {
+        let wsNC = NSWorkspace.shared.notificationCenter
+        wsNC.addObserver(self, selector: #selector(stopTimer), name: NSWorkspace.willSleepNotification, object: nil)
+        
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(stopTimer),
+            name: NSNotification.Name("com.apple.screenIsLocked"),
+            object: nil
+        )
+    }
+
+    @objc func stopTimer() {
+        if isRunning {
+            isRunning = false
+            updateStatusItemUI()
+        }
     }
     
     @objc func toggleAction() {
@@ -72,9 +92,9 @@ class TimerAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(NSMenuItem(title: "시작/정지 (Shift+Ctrl+S)", action: #selector(toggleAction), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "초기화", action: #selector(resetTimer), keyEquivalent: ""))
         menu.addItem(NSMenuItem.separator())
-        menu.addItem(NSMenuItem(title: "하루의 마무리 +1시간", action: #selector(addMidnightOffset), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "하루의 마무리 -1시간", action: #selector(subMidnightOffset), keyEquivalent: ""))
-        menu.addItem(NSMenuItem(title: "하루의 마무리 초기화", action: #selector(resetMidnightOffset), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "하루의 마무리 시간 설정", action: #selector(editFinishTime), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "오늘 기록 수정", action: #selector(editTodayRecord), keyEquivalent: ""))
+        menu.addItem(NSMenuItem(title: "어제 기록 수정", action: #selector(editYesterdayRecord), keyEquivalent: ""))
         
         menu.addItem(NSMenuItem.separator())
         let historyItem = NSMenuItem(title: "📋 최근 7일 기록", action: nil, keyEquivalent: "")
@@ -112,22 +132,57 @@ class TimerAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(NSMenuItem(title: "종료", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
     }
     
-    @objc func addMidnightOffset() {
-        midnightOffset += 3600
-        UserDefaults.standard.set(midnightOffset, forKey: "midnightOffset")
-        updateStatusItemUI()
+    @objc func editFinishTime() {
+        let currentH = midnightOffset / 3600
+        let currentM = (midnightOffset % 3600) / 60
+        let defaultVal = String(format: "%02d:%02d", currentH, currentM)
+        
+        showInputAlert(title: "하루의 마무리 시간 설정", message: "예시: 02:00 (새벽 2시)", defaultValue: defaultVal) { input in
+            guard let input = input else { return }
+            let parts = input.split(separator: ":").map { String($0).trimmingCharacters(in: .whitespaces) }.compactMap { Int($0) }
+            if parts.count >= 1 {
+                let h = parts[0]
+                let m = parts.count >= 2 ? parts[1] : 0
+                self.midnightOffset = h * 3600 + m * 60
+                UserDefaults.standard.set(self.midnightOffset, forKey: "midnightOffset")
+                self.updateStatusItemUI()
+            }
+        }
     }
     
-    @objc func subMidnightOffset() {
-        midnightOffset -= 3600
-        UserDefaults.standard.set(midnightOffset, forKey: "midnightOffset")
-        updateStatusItemUI()
+    @objc func editTodayRecord() {
+        let defaultVal = formatSecondsToTime(seconds)
+        showInputAlert(title: "오늘 기록 수정", message: "형식: HH:mm:ss", defaultValue: defaultVal) { input in
+            guard let input = input, let newSeconds = self.parseTimeToSeconds(input) else { return }
+            self.seconds = newSeconds
+            UserDefaults.standard.set(self.seconds, forKey: "savedSeconds")
+            
+            let currentDay = self.currentDateString()
+            var dailyRecords = UserDefaults.standard.dictionary(forKey: "dailyRecords") as? [String: Int] ?? [:]
+            dailyRecords[currentDay] = self.seconds
+            UserDefaults.standard.set(dailyRecords, forKey: "dailyRecords")
+            
+            self.updateStatusItemUI()
+        }
     }
     
-    @objc func resetMidnightOffset() {
-        midnightOffset = 0
-        UserDefaults.standard.set(midnightOffset, forKey: "midnightOffset")
-        updateStatusItemUI()
+    @objc func editYesterdayRecord() {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        let logicalNow = Date().addingTimeInterval(-Double(midnightOffset))
+        guard let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: logicalNow) else { return }
+        let dateString = formatter.string(from: yesterday)
+        
+        var dailyRecords = UserDefaults.standard.dictionary(forKey: "dailyRecords") as? [String: Int] ?? [:]
+        let currentVal = dailyRecords[dateString] ?? 0
+        let defaultVal = formatSecondsToTime(currentVal)
+        
+        showInputAlert(title: "어제 기록 수정 (\(dateString))", message: "형식: HH:mm:ss", defaultValue: defaultVal) { input in
+            guard let input = input, let newSeconds = self.parseTimeToSeconds(input) else { return }
+            dailyRecords[dateString] = newSeconds
+            UserDefaults.standard.set(dailyRecords, forKey: "dailyRecords")
+            self.updateStatusItemUI()
+        }
     }
     
     func setupCarbonHotkey() {
@@ -249,6 +304,45 @@ class TimerAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } else {
             return String(format: "%02d:%02d", m, s)
         }
+    }
+
+    func showInputAlert(title: String, message: String, defaultValue: String, completion: @escaping (String?) -> Void) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: "확인")
+        alert.addButton(withTitle: "취소")
+        
+        let inputTextField = NSTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
+        inputTextField.stringValue = defaultValue
+        alert.accessoryView = inputTextField
+        
+        NSApp.activate(ignoringOtherApps: true)
+        let response = alert.runModal()
+        if response == .alertFirstButtonReturn {
+            completion(inputTextField.stringValue)
+        } else {
+            completion(nil)
+        }
+    }
+    
+    func parseTimeToSeconds(_ timeStr: String) -> Int? {
+        let parts = timeStr.split(separator: ":").map { String($0).trimmingCharacters(in: .whitespaces) }.compactMap { Int($0) }
+        if parts.count == 3 {
+            return parts[0] * 3600 + parts[1] * 60 + parts[2]
+        } else if parts.count == 2 {
+            return parts[0] * 3600 + parts[1] * 60
+        } else if parts.count == 1 {
+            return parts[0] * 60
+        }
+        return nil
+    }
+
+    func formatSecondsToTime(_ totalSeconds: Int) -> String {
+        let h = totalSeconds / 3600
+        let m = (totalSeconds % 3600) / 60
+        let s = totalSeconds % 60
+        return String(format: "%02d:%02d:%02d", h, m, s)
     }
 }
 
