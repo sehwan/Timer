@@ -105,7 +105,9 @@ class TimerAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
            let yearEnd = calendar.date(from: DateComponents(year: year, month: 12, day: 31)),
            let daysPassed = calendar.dateComponents([.day], from: calendar.startOfDay(for: yearStart), to: calendar.startOfDay(for: now)).day,
            let daysRemaining = calendar.dateComponents([.day], from: calendar.startOfDay(for: now), to: yearEnd).day {
-            let yearEndItem = NSMenuItem(title: "📅 \(daysPassed) / \(daysRemaining)", action: nil, keyEquivalent: "")
+            let totalDays = calendar.range(of: .day, in: .year, for: now)?.count ?? 365
+            let percentageValue = (Double(daysPassed) / Double(totalDays)) * 100
+            let yearEndItem = NSMenuItem(title: "📅 \(daysPassed) / \(daysRemaining) (\(String(format: "%.1f", percentageValue))%)", action: nil, keyEquivalent: "")
             yearEndItem.isEnabled = false
             menu.addItem(yearEndItem)
         }
