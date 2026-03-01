@@ -88,21 +88,24 @@ class ScheduleWindowController: NSObject, NSWindowDelegate, NSTextFieldDelegate 
             window.center()
         }
         
-        let dateStr = delegate.currentDateString()
-        let stored = UserDefaults.standard.dictionary(forKey: "schedules_\(dateStr)") as? [String: String] ?? [:]
+        let stored = UserDefaults.standard.dictionary(forKey: "dailySchedules") as? [String: String] ?? [:]
         for tf in textFields {
             tf.stringValue = stored["\(tf.tag)"] ?? ""
         }
         
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        
+        let currentHour = Calendar.current.component(.hour, from: Date())
+        if let tfToFocus = textFields.first(where: { $0.tag == currentHour }) {
+            window.makeFirstResponder(tfToFocus)
+        }
     }
     
     func controlTextDidChange(_ obj: Notification) {
         if let tf = obj.object as? NSTextField {
             let hour = tf.tag
-            let dateStr = delegate.currentDateString()
-            let key = "schedules_\(dateStr)"
+            let key = "dailySchedules"
             var stored = UserDefaults.standard.dictionary(forKey: key) as? [String: String] ?? [:]
             stored["\(hour)"] = tf.stringValue.trimmingCharacters(in: .whitespaces)
             UserDefaults.standard.set(stored, forKey: key)
@@ -221,8 +224,7 @@ class TimerAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(NSMenuItem(title: "시작/정지 (Shift+Ctrl+S)", action: #selector(toggleAction), keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: "일정", action: #selector(showScheduleWindow), keyEquivalent: ""))
         
-        let dateStr = currentDateString()
-        let stored = UserDefaults.standard.dictionary(forKey: "schedules_\(dateStr)") as? [String: String] ?? [:]
+        let stored = UserDefaults.standard.dictionary(forKey: "dailySchedules") as? [String: String] ?? [:]
         
         let hours = Array(6...23) + Array(0...5)
         var grouped: [(start: Int, end: Int, text: String)] = []
@@ -462,8 +464,7 @@ class TimerAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
     
     func getCurrentSchedule() -> String? {
-        let dateStr = currentDateString()
-        let stored = UserDefaults.standard.dictionary(forKey: "schedules_\(dateStr)") as? [String: String] ?? [:]
+        let stored = UserDefaults.standard.dictionary(forKey: "dailySchedules") as? [String: String] ?? [:]
         
         let now = Date()
         
