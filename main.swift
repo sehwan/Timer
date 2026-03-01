@@ -102,12 +102,17 @@ class TimerAppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let now = Date()
         let year = calendar.component(.year, from: now)
         if let yearStart = calendar.date(from: DateComponents(year: year, month: 1, day: 1)),
-           let yearEnd = calendar.date(from: DateComponents(year: year, month: 12, day: 31)),
-           let daysPassed = calendar.dateComponents([.day], from: calendar.startOfDay(for: yearStart), to: calendar.startOfDay(for: now)).day,
-           let daysRemaining = calendar.dateComponents([.day], from: calendar.startOfDay(for: now), to: yearEnd).day {
-            let totalDays = calendar.range(of: .day, in: .year, for: now)?.count ?? 365
-            let percentageValue = (Double(daysPassed) / Double(totalDays)) * 100
-            let yearEndItem = NSMenuItem(title: "📅 \(daysPassed) / \(daysRemaining) (\(String(format: "%.1f", percentageValue))%)", action: nil, keyEquivalent: "")
+           let nextYearStart = calendar.date(from: DateComponents(year: year + 1, month: 1, day: 1)) {
+            let totalSeconds = nextYearStart.timeIntervalSince(yearStart)
+            let passedSeconds = now.timeIntervalSince(yearStart)
+            let remainingSeconds = nextYearStart.timeIntervalSince(now)
+            
+            let remainingPercentage = (remainingSeconds / totalSeconds) * 100
+            
+            let daysPassed = passedSeconds / 86400.0
+            let daysRemaining = remainingSeconds / 86400.0
+            
+            let yearEndItem = NSMenuItem(title: String(format: "📅 %.3f / %.3f (%.3f%%)", daysPassed, daysRemaining, remainingPercentage), action: nil, keyEquivalent: "")
             yearEndItem.isEnabled = false
             menu.addItem(yearEndItem)
         }
